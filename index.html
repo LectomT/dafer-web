@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>다빈치의 책장</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width"/>
+	<link rel="stylesheet" href="css/basic.css" type="text/css"/>
+	<link rel="stylesheet" href="css/signin.css" type="text/css"/>
+	
+	<script type="text/javascript">
+		var offset_latitude = 0.005091117845203996,
+			offset_longitude = 0.00644199550153246,
+			c_latitude = 37.78886,
+			c_longitude = 126.69719,
+			sw_latitude = c_latitude - offset_latitude,
+			sw_longitude = c_longitude - offset_longitude,
+			ne_latitude = c_latitude + offset_latitude,
+			ne_longitude = c_longitude + offset_longitude;
+		var map, mapOptions,last_zoom = 15,
+			markersArray = [];
+		var bookshelvesArray = [];
+		var sort_by = "random";
+
+	</script>
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+	<script src="js/jquery.infinitescroll.min.js"></script>
+	<script src="http://masonry.desandro.com/masonry.pkgd.min.js"></script>
+	<script src="js/raphael-min.js"></script>
+	<script src="js/myLocation.js"></script>
+	<script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?key=AIzaSyD6g8OfeZO32K1-ZU1eVARN0ExE0jTpru0&sensor=false&language=ko"></script>
+	
+	<script type="text/javascript">
+		function initialize() {
+	        mapOptions = {
+	          center: new google.maps.LatLng(c_latitude, c_longitude),
+	          zoom: last_zoom,
+	          mapTypeId: google.maps.MapTypeId.ROADMAP,
+	          disableDefaultUI: true,
+	          mapTypeControl: true,
+	          mapTypeControlOptions: {
+			    style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+			    position: google.maps.ControlPosition.BOTTOM_CENTER
+			  },
+	          zoomControl: true,
+	          zoomControlOptions: {
+			    style: google.maps.ZoomControlStyle.LARGE,
+			    position: google.maps.ControlPosition.RIGHT_BOTTOM
+			  }
+	        };
+	        map = new google.maps.Map(document.getElementById("map-canvas"),
+	            mapOptions);
+	    }
+
+	    $(document).ready(function(){
+			initialize();	
+
+			$("#search_form").submit(function(event){
+				event.preventDefault();
+
+				var $form = $(this),
+				term = $form.find('input[name="query"]').val(),
+				url = $form.attr('action');
+
+				var posting = $.post(url,{query:term});
+				posting.done(function(data){
+					$('.booklist').remove();
+					getBookInBookshelf();
+				});
+			});
+			
+			$("#login_button").click(function() {
+				alert("로그인");
+			});
+
+			$("#sort_by_pub_date_desc").click(function() {
+				sort_by = "pub_date_desc";
+				$('#book').html("");
+				getBookInBookshelf();
+			});
+
+			$("#sort_by_reg_date_desc").click(function() {
+				sort_by = "reg_date_desc";
+				$('#book').html("");
+				getBookInBookshelf();
+			});
+
+			$("#sort_by_random").click(function() {
+				sort_by = "random";
+				$('#book').html("");
+				getBookInBookshelf();
+			});
+			$(".logo").click(function(){
+				location.reload();
+			});
+
+			
+
+			var src = document.getElementById("location_refresh").src,
+                    angle = 0;
+            document.getElementById("location_list").innerHTML = "";
+            var R = Raphael("location_list", 36, 36);
+            //R.circle(320, 240, 200).attr({fill: "#000", "fill-opacity": .5, "stroke-width": 5});
+            var img = R.image(src, 7.2,7,22,22,"linear (default)");
+
+			$("div.locationlist").click(function(){
+				
+                angle += 360;
+                img.animate({transform: "r" + angle}, 1000, "<>");
+
+				c_latitude = map.getCenter().lat();
+				c_longitude = map.getCenter().lng();
+    			sw_latitude = map.getBounds().getSouthWest().lat();
+    			sw_longitude = map.getBounds().getSouthWest().lng();
+    			ne_latitude = map.getBounds().getNorthEast().lat();
+    			ne_longitude = map.getBounds().getNorthEast().lng();
+    			$('#bookshelf').html("");
+    			$('#book').html("");
+    			getBookshelfInRectRange();	
+			});
+
+			// When clicking on the button close or the mask layer the popup closed
+			$('a.close, #mask').click(function() { 
+			  $('#mask , .book-detail-popup').fadeOut(300 , function() {
+				$('#mask').remove();  
+			}); 
+			return false;
+			});
+
+			getBookshelfInRectRange();
+			getMyLocation();
+		});
+
+		var bookshelflist = [];
+		var bookshelflist_full_length = 0;
+
+		function getBookshelfInRectRange(){
+			
+			var	bookshelf_id, name, pic_url, description, book_count,
+				latitude,longitude,distance;
+
+			$.ajax({
+	            type : "GET",
+	            url : "http://dafer-dev.herokuapp.com/bookshelf/in_rect_range/",
+	            data : "sw_latitude="+sw_latitude+"&sw_longitude="+sw_longitude+"&ne_latitude="+ne_latitude+"&ne_longitude="+ne_longitude,
+	            dataType : "jsonp",
+	            success : function(json) {
+	            	//$('#map-canvas').html("");
+	            	mapOptions = {
+			          center: new google.maps.LatLng(c_latitude, c_longitude),
+			          zoom: last_zoom,
+			          mapTypeId: google.maps.MapTypeId.ROADMAP,
+			          disableDefaultUI: true,
+			          mapTypeControl: true,
+			          mapTypeControlOptions: {
+					    style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+					    position: google.maps.ControlPosition.BOTTOM_CENTER
+					  },
+			          zoomControl: true,
+			          zoomControlOptions: {
+					    style: google.maps.ZoomControlStyle.LARGE,
+					    position: google.maps.ControlPosition.RIGHT_BOTTOM
+					  }
+			        };
+					
+					if (markersArray) {
+					    for (i in markersArray) {
+					      markersArray[i].setMap(null);
+					    }
+					    markersArray.length = 0;
+					}
+		            map.setOptions(mapOptions);
+		            
+		            google.maps.event.addListener(map, 'bounds_changed', function() {
+		            		last_zoom = map.getZoom();
+		        			$("div.locationlist").css({
+		        				'background-color': '#d5ff95'
+		        			});
+		         	});  		
+	  				
+	            	bookshelflist = [];
+	            	var items = [];
+	            	for(var i=0;i<json.items.length;i++){
+	            		bookshelflist_full_length = json.items.length;
+		        		$.each(json.items[i], function(key, val) {
+		        			if(key=='book_count'){ book_count = val; }
+		        			if(key=='name'){ name = val; }
+		        			if(key=='description'){ description = val; }
+		        			if(key=='pic_url'){ pic_url = val; }
+		            		if(key=='id'){
+		            			bookshelflist[bookshelflist.length] = val;
+		            			bookshelf_id = val;
+		            		}
+		            		if(key=='latitude'){ latitude = val; }
+		            		if(key=='longitude'){ longitude = val; }
+		                });
+		                
+		                //if(book_count!=0){
+			                items.push('<span class="bookshelfitem" id="' + bookshelf_id + '"><span style="font-size:14px; margin-left:0px;">' + name + '</span></span>');
+			                var myLatlng = new google.maps.LatLng(latitude,longitude);
+			                var marker = new google.maps.Marker({
+							    position: myLatlng,
+							    map: map,
+							    draggable:false,
+							    title: bookshelf_id.toString()
+							});
+							
+							markersArray.push(marker);
+							google.maps.event.addListener(markersArray[markersArray.length-1], 'click', function(){
+								bookshelflist = [];
+								$('#book').html("");
+								bookshelflist.push(this.title);
+								var walker = this.title;
+		        				getBookInBookshelf();
+		        				$("span.bookshelfitem").each(function(index){
+		        					if(this.id == walker){
+		        						$(this).css({ 
+											'color': '#6A5ACD',
+											'font-weight' : 'bold',
+											'background': '#fFfffF'
+										});
+		        					}else{
+		        						$(this).css({
+					        				'color': '#222',
+					        				'font-weight' : 'normal',
+					        				'background' : '#f8f8f8'
+					        			});
+		        					}
+		        				});
+							});
+		            	//}
+	        		}
+
+
+
+	                $('<div/>', {
+		        		'class': 'bookshelflist',
+		        		html: items.join('')
+		        	}).appendTo('#bookshelf');
+
+
+		        	//$("div.bookshelflist").addClass("nav_ul");
+		        	//$("li.bookshelfitem").addClass("arrow_no nav_ul_li_a");
+		        	$("span.bookshelfitem").each(function(index){
+		        		$(this).click(function(){
+		        			bookshelflist = [];
+		        			$("span.bookshelfitem").css({
+		        				'color': '#222',
+		        				'font-weight' : 'normal',
+		        				'background' : '#f8f8f8'
+		        			});
+		        			
+	        				$(this).css({ 
+								'color': '#6A5ACD',
+								'font-weight' : 'bold',
+								'background': '#fFfffF'
+							});
+							bookshelflist.push(this.id);
+							
+		        			$('#book').html("");
+		        			getBookInBookshelf();
+		        			return false;
+	        			});
+		        	});
+		        	$("div.locationlist").css({
+						'background-color': '#fff'
+					});
+					$("div.locationlist").hover(function(){
+							$(this).css({
+							'background-color': '#f0fff0'
+						});
+					},function(){
+							$(this).css({
+							'background-color': '#fff'
+						});
+					});
+					
+		        	var container = document.querySelector('.bookshelflist');
+					var msnry = new Masonry( container, {
+					  // options
+					  columnWidth: 10,
+					  itemSelector: '.bookshelfitem',
+					  gutter : 20
+					});
+		        	getBookInBookshelf();
+	        	},
+	            error : function(e) {
+	                alert("error");
+	            }
+	        });
+		}
+
+		function getBookInBookshelf() {
+			var query = document.forms["search_form"]["query"].value;
+			var f_offset = 0, l_offset = 9, in_bookshelf = "";
+			
+			for(var i=0;i<bookshelflist.length;i++){
+				in_bookshelf += bookshelflist[i];
+				if(i!=bookshelflist.length-1){
+					in_bookshelf += "+";
+				}
+			}
+
+			$.ajax({
+	            type : "GET",
+	            url : "http://dafer-dev.herokuapp.com/book/in_bookshelf/"+in_bookshelf+"/",
+	            data : "f_offset="+f_offset+"&l_offset="+l_offset+"&query="+query+"&sort_by="+sort_by,
+	            dataType : "jsonp",
+	            success : function(json) {
+	            	var items = [];
+	            	for(var i=0;i<json.items.length;i++){
+	            		var book_id, pic_url, title,author,sub_title;
+	            		$.each(json.items[i], function(key, val) {
+		        			if(key=='pic_url'){ pic_url = val; }
+		        			if(key=='book_id'){ book_id = val; }
+		        			if(key=="author"){ author = val; }
+		        			if(key=="sub_title"){ sub_title = val; }
+		        			if(key=='title'){ title = val; }	
+		                });
+		                if(sub_title==null||sub_title=="null"||sub_title==""||sub_title==" "){
+		                	items.push('<div class="bookitem" id="'+book_id+'">' + '<table><tr><td class="bookitem_td" align="center"><img class="bookitem_pic" src="'+pic_url +'"/></td></tr><tr><td><span class="bookitem_title">'+ title + '</span></td><tr><tr><td style="padding-top:12px;"><span class="bookitem_author">' +"/ "+ author + '</span></td></tr></table></div>');
+		                }else{
+		                	items.push('<div class="bookitem" id="'+book_id+'">' + '<table ><tr><td class="bookitem_td" align="center"><img class="bookitem_pic" src="'+pic_url +'"/></td></tr><tr><td colspan="2"><span class="bookitem_title">'+ title + '</span></td><tr><tr><td style="padding-top:12px;"><span class="bookitem_sub_title">' +": "+sub_title + '</td><tr><tr><td colspan="2" style="padding-top:12px;"><span class="bookitem_author">'+"/ "+author+'</span></td></tr></table></div>');
+		            	}
+	    			}
+	    			$('#book').html(items.join(''));
+	                /*$('<div/>', {
+		        		'class': 'booklist',
+		        		html: items.join('')
+		        	}).appendTo('#book');*/
+
+		        	//$("div.booklist").addClass("nav_ul");
+		        	$("div.bookitem").addClass("arrow_no nav_ul_li_a");		        
+
+		        	$("div.bookitem").each(function(index){
+		        		$(this).click(function(){
+		        			var loginBox = $("#book-detail-box");
+							$(loginBox).fadeIn(300);
+							
+							//Set the center alignment padding + border
+							var popMargTop = ($(loginBox).height() + 24) / 2; 
+							var popMargLeft = ($(loginBox).width() + 24) / 2; 
+							
+							$(loginBox).css({ 
+								'margin-top' : -popMargTop,
+								'margin-left' : -popMargLeft
+							});
+							// Add the mask to body
+							$('body').append('<div id="mask"></div>');
+							$('#mask').fadeIn(300);
+							
+							getBookDetail(this.id);
+							return false;						
+	        			});
+	        		});
+
+	        		var container = document.querySelector('#book');
+					var msnry = new Masonry( container, {
+					  // options
+					  columnWidth: 10,
+					  itemSelector: '.bookitem',
+					  gutter : 24
+					});
+
+					$('#book').append(items.join(''));
+					$("div.bookitem").addClass("arrow_no nav_ul_li_a");		        
+					$('#book').append(items.join(''));
+					$("div.bookitem").addClass("arrow_no nav_ul_li_a");		        
+					$('#book').append(items.join(''));
+					$("div.bookitem").addClass("arrow_no nav_ul_li_a");		        
+					$('#book').append(items.join(''));
+					$("div.bookitem").addClass("arrow_no nav_ul_li_a");		        
+					msnry = new Masonry( container, {
+					  // options
+					  columnWidth: 10,
+					  itemSelector: '.bookitem',
+					  gutter : 14
+					});
+					//eventie.bind( button, 'click', function() {
+					    // create new item elements
+					    /*var elems = [];
+					    var fragment = document.createDocumentFragment();
+					    for ( var i = 0; i < 3; i++ ) {
+					      var elem = getItemElement();
+					      fragment.appendChild( elem );
+					      elems.push( elem );
+					    }
+					    // append elements to container
+					    container.appendChild( fragment );
+					    // add and lay out newly appended elements
+					    msnry.appended( elems );*/
+  					//});
+					//$('#book').append(items.join(''));
+	        	},
+	            error : function(e){
+	                alert("error");
+	            }
+	        });
+		}
+
+		function getItemElement() {
+		  var elem = document.createElement('div');
+		  var wRand = Math.random();
+		  var hRand = Math.random();
+		  var widthClass = wRand > 0.92 ? 'w4' : wRand > 0.8 ? 'w3' : wRand > 0.6 ? 'w2' : '';
+		  var heightClass = hRand > 0.85 ? 'h4' : hRand > 0.6 ? 'h3' : hRand > 0.35 ? 'h2' : '';
+		  elem.className = 'item ' + widthClass + ' ' + heightClass;
+		  return elem;
+		}
+
+		function getBookDetail(book_id) {
+			$.ajax({
+	            type : "GET",
+	            url : "http://dafer-dev.herokuapp.com/book/"+book_id+"/",
+	            data : "",
+	            dataType : "jsonp",
+	            success : function(json) {
+	            	var title, author, sub_title, pic_url, description, tags="",pub_date;
+
+            		$.each(json.item, function(key, val) {
+	        			if(key=='pic_url'){ pic_url = val; }
+	        			if(key=='book_id'){ book_id = val; }
+	        			if(key=='pub_date'){ pub_date = val; }
+	        			if(key=="author"){ author = val; }
+	        			if(key=="description"){ description = val; }
+	        			if(key=="sub_title"){ sub_title = val; }
+	        			if(key=='title'){ title = val; }	
+	                });
+	                for(var i=0;i<json.item.tag.length;i++){
+	                	var tag_kind;
+		                   $.each(json.item.tag[i],function(key, val){
+		                	if(key=="tag_kind"){
+		                		tag_kind = val;
+		                	}
+		                	if(key=="tag_name" && tag_kind=="category"){
+		                		tags = tags +"#"+ val + "&nbsp; &nbsp;";
+		                	}
+		                });
+	        		}
+
+	        		if(sub_title==null||sub_title=="null"||sub_title==""||sub_title==" "){
+	        			$("#book-detail-box").html('<a href="#" class="close">'
+	        				+'<img src="images/close_pop.png" class="btn_close" title="Close Window" alt="Close" /></a><p>'
+	        				+'<table border="0"><tr>'
+	        				+'<td valign="top" width="125"><img class="book_detail_pic" align="bottom" border="1" src="'+pic_url+'"></td>'
+	        				+'<td valign="bottom">'
+	        				+'<span class="book_detail_title">'+title+ '</span><br><span class="book_detail_author">'+author+'</span><br><span class="book_detail_sub_title">' + "" + '</span></td></tr>'
+	        				+'<tr><td colspan="2" height="20"></td></tr>'
+	        				+'<tr><td colspan="2" class="book-detail-popup2"><p><span class="book_detail_description">'+description+'</span></p><p><span class="book_detail_tags">'+tags+'</span></p></td></tr></table>');
+	                }else{
+	                	$("#book-detail-box").html('<a href="#" class="close">'
+	        				+'<img src="images/close_pop.png" class="btn_close" title="Close Window" alt="Close" /></a><p>'
+	        				+'<table border="0"><tr>'
+	        				+'<td valign="top" width="125"><img class="book_detail_pic" align="bottom" border="1" src="'+pic_url+'"></td>'
+	        				+'<td valign="bottom">'
+	        				+'<span class="book_detail_title">'+title+ '</span><br><span class="book_detail_sub_title">' + sub_title + '</span><br><span class="book_detail_author">'+author+'</span></td></tr>'
+	        				+'<tr><td colspan="2" height="20"></td></tr>'
+	        				+'<tr><td colspan="2" class="book-detail-popup2"><p><span class="book_detail_description">'+description+'</span></p><p><span class="book_detail_tags">'+tags+'</span></p></td></tr></table>');
+	            	}
+
+	                $('a.close, #mask').click(function() { 
+					  	$('#mask , .book-detail-popup').fadeOut(300 , function() {
+					  		$("#book-detail-box").html('<img src="http://gifasm.com/img/loading.gif" width="60" height="60">');
+							$('#mask').remove();  
+						}); 
+					return false;
+					});
+	        	},
+	            error : function(e) {
+	                alert("error");
+	            }
+	        });
+		}	
+		    
+	</script>
+</head>
+
+<body>
+	
+	<div class="center">
+	
+	<div class="center" style="clear:both;">
+		<div id="map-canvas"></div>
+		<table style="margin-top:10px">
+		<tr>
+			<td style="width:36px;" valign=top>
+				<div id="location_list" class="locationlist">
+					<img id="location_refresh" src="images/icon_refresh.png"/>
+				</div>
+			</td>
+			<td style="padding-top:10px;">
+				<div id="bookshelves">
+					<div id="bookshelf"></div>	
+				</div>
+			</td>
+		</tr>
+		</table>
+
+	</div>
+	<div style="clear:both;"></div>
+	<div id="content">
+		<div id="book" class="center">
+		</div>
+		<nav id="page_nav">
+			<a href="http://dafer-dev.herokuapp.com/book/in_bookshelf/2" id="next"></a>
+		</nav>
+	</div>
+
+    <div id="book-detail-box" class="book-detail-popup">
+    	<img src="http://gifasm.com/img/loading.gif" width="60" height="60">
+	</div>
+
+	<nav id="nav">
+		<div class="center">
+			<ul style="float:left; height:10px">
+				<li class="filter_list">
+					<ul>
+						<li id="sort_by_pub_date_desc" class="filter_item" style="width:54px;">신간</li>
+						<li id="sort_by_reg_date_desc" class="filter_item" style="width:54px;">최근등록</li>
+						<li id="sort_by_random"class="filter_item" style="width:54px;">무작위</li>
+					</ul>
+				</li>
+			</ul>
+			<form id="search_form" action="index.html" style="margin-top:0px; float:left;">
+				<input class="search_query" type="text" name="query" placeholder="근처의 책 검색">
+				<input type="submit" value="" class="input_search">
+			</form>
+			<div class="logo"></div>
+
+			<div id="login_button"></div>
+		</div>
+	</nav>	
+
+	<footer>
+	</footer>
+	</div>
+
+</body>
+</html>
