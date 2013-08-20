@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Da Vinci's Bookshelf</title>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="css/basic.css" type="text/css"/>
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+	<script src="js/jquery.infinitescroll.min.js"></script>
+	
+	<script>
+		$(document).ready(function(){
+			getBookshelfInRectRange();
+		});
+
+		var bookshelflist = [];
+
+		function getBookshelfInRectRange(){
+			var sw_latitude = 37.78886 - 0.005091117845203996;
+			var sw_longitude = 126.69719 - 0.00644199550153246;
+			var ne_latitude = 37.78886 + 0.005091117845203996;
+			var ne_longitude = 126.69719 + 0.00644199550153246;
+
+			$.ajax({
+	            type : "GET",
+	            url : "http://dafer-dev.herokuapp.com/bookshelf/in_rect_range/",
+	            data : "sw_latitude="+sw_latitude+"&sw_longitude="+sw_longitude+"&ne_latitude="+ne_latitude+"&ne_longitude="+ne_longitude,
+	            dataType : "jsonp",
+	            success : function(json) {
+	            	bookshelflist = [];
+	            	var items = [];
+	            	for(var i=0;i<json.items.length;i++){
+		        		$.each(json.items[i], function(key, val) {
+		        			if(key=='name'){
+		            			items.push('<li class="arrow" id="' + key + '">' + val + '</li>');
+		            		}
+		            		if(key=='id'){
+		            			bookshelflist[bookshelflist.length]=val;
+		            		}
+		                });
+	        		}
+	                $('<ul/>', {
+		        		'class': 'bookshelflist',
+		        		html: items.join('')
+		        	}).appendTo('#bookshelf');
+
+		        	$("ul.booklist").addClass("nav_ul");
+		        	$("li.arrow").addClass("arrow_chevron nav_ul_li_a");
+		        	getBookInBookshelf();
+	        	},
+	            error : function(e) {
+	                alert("error");
+	            }
+	        });
+		}
+
+		function getBookInBookshelf() {
+			var query = document.forms["search_form"]["query"].value;
+			//alert(q);
+			var f_offset = 0;
+			var l_offset = 9;
+			//var query = "";
+			var in_bookshelf = "";
+			for(var i=0;i<bookshelflist.length;i++){
+				in_bookshelf += bookshelflist[i];
+				if(i!=bookshelflist.length-1){
+					in_bookshelf += "+";
+				}
+			}
+
+			$.ajax({
+	            type : "GET",
+	            url : "http://dafer-dev.herokuapp.com/book/in_bookshelf/"+in_bookshelf+"/",
+	            data : "f_offset="+f_offset+"&l_offset="+l_offset+"&query="+query,
+	            dataType : "jsonp",
+	            success : function(json) {
+	            	var items = [];
+	            	for(var i=0;i<json.items.length;i++){
+	            		var text;
+		        		$.each(json.items[i], function(key, val) {
+		        			if(key=='pic_url'){
+		        				items.push('<li class="bookitem" style="height:60px;" id="' + key + '"><a href="">' + '<img border="1" style="float:left; display:inline-block; vertical-align:middle; width:40px; height:55px; margin-right:10px;" src="'+val + '"/>');
+		        			}
+		        			if(key=="author"){
+		        				if(val==null){
+		        					text="";
+		        				}else{
+		        					text = val;
+		        				}
+		        			}
+		        			if(key=="sub_title"){
+		        				if(val==null || val==""){
+
+		        				}else{
+		        					text = val+"<br>"+text;
+		        				}
+		        			}
+		        			if(key=='title'){
+		            			items.push('<a style="font-weight:bold;">' + val + "</a><br>" + text + '</a></li>');
+		            		}
+		                });
+	        		}
+	                $('<ul/>', {
+		        		'class': 'booklist',
+		        		html: items.join('')
+		        	}).appendTo('#book');
+
+		        	$("ul.booklist").addClass("nav_ul");
+		        	$("li.bookitem").addClass("arrow_no nav_ul_li_a");		        		
+	        	},
+	            error : function(e) {
+	                alert("error");
+	            }
+	        });
+		}
+		 
+	</script>
+</head>
+
+<body>	
+	<nav id="bookshelf" style="width:200px; float:left;">
+		<p style="margin-left:20px">책장<input type="button" value="위치"></p>
+	</nav>
+
+	<div style="width:480px; float:left;" id="layer">
+		
+		<form id="search_form" action="index.html">
+			<input type="text" name="query" placeholder="책 검색" style="width:360px; padding:12px 10px; margin-left:10px;">
+			<input type="submit" value="검색" style="width:60px; margin-right:10px; padding:12px 10px;">
+		</form>
+		<script type="text/javascript">
+			$("#search_form").submit(function(event){
+			event.preventDefault();
+
+			var $form = $(this),
+			term = $form.find('input[name="query"]').val(),
+			url = $form.attr('action');
+
+			var posting = $.post(url,{query:term});
+			posting.done(function(data){
+				$('.booklist').remove();
+				getBookInBookshelf();
+			});
+		});
+		</script>
+		
+		<div id="book">
+		</div>
+
+		<nav id="page_nav">
+			<a id="next" href="test.html"></a>
+		</nav>
+	
+		<script type="text/javascript">
+		    $('#layer').infinitescroll({
+		        navSelector  : "#page_nav",    // selector for the paged navigation 
+		        nextSelector : "#page_nav a#next:last",  // selector for the NEXT link (to page 2)
+		        itemSelector : "#book",     // selector for all items you'll retrieve
+		        debug : true
+	        },function(newElements){
+	        	alert("hi");
+	        });	  	
+	    </script>
+
+	</div>
+	
+	<footer>
+	</footer>
+</body>
+</html>
